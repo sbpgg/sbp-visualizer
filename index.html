@@ -293,7 +293,7 @@
       </div>
 
       <div class="note-box">
-        This version fills the selected area with repeating slab texture. It is still a simple visualizer and not full AI surface detection yet.
+        This version uses one slab image across the selected area instead of repeating a tile pattern.
       </div>
     </div>
 
@@ -311,6 +311,7 @@
         <button class="secondary-btn" onclick="finishShape()">Finish Shape</button>
         <button class="secondary-btn" onclick="undoLastPoint()">Undo Last Point</button>
         <button class="secondary-btn" onclick="showOriginal()">Show Original</button>
+        <button class="secondary-btn" onclick="downloadImage()">Download Image</button>
         <button class="secondary-btn" onclick="clearSelection()">Clear Selection</button>
         <button class="secondary-btn" onclick="clearPreview()">Clear All</button>
       </div>
@@ -651,32 +652,41 @@
       }
     }
 
-    function createTexturePattern() {
-      if (!selectedTextureImage) return null;
-      return ctx.createPattern(selectedTextureImage, "repeat");
+    function getPolygonBounds(points) {
+      let minX = points[0].x;
+      let minY = points[0].y;
+      let maxX = points[0].x;
+      let maxY = points[0].y;
+
+      for (const point of points) {
+        if (point.x < minX) minX = point.x;
+        if (point.y < minY) minY = point.y;
+        if (point.x > maxX) maxX = point.x;
+        if (point.y > maxY) maxY = point.y;
+      }
+
+      return {
+        x: minX,
+        y: minY,
+        w: maxX - minX,
+        h: maxY - minY
+      };
     }
 
-    function applyTextureInsideCurrentClip() {
-      const pattern = createTexturePattern();
-      if (!pattern) {
-        alert("Selected texture image could not be loaded.");
-        return false;
-      }
+    function drawSingleSlabImage(x, y, w, h) {
+      if (!selectedTextureImage) return false;
 
-      ctx.globalAlpha = 0.75;
-      ctx.fillStyle = pattern;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.globalAlpha = 0.78;
+      ctx.drawImage(selectedTextureImage, x, y, w, h);
 
-      ctx.globalAlpha = 0.18;
+      ctx.globalAlpha = 0.12;
       ctx.fillStyle = "#ffffff";
-      for (let i = 0; i < canvas.height; i += 18) {
-        ctx.fillRect(0, i, canvas.width, 5);
-      }
+      ctx.fillRect(x, y, w, h);
 
-      ctx.globalAlpha = 0.20;
+      ctx.globalAlpha = 0.08;
       ctx.fillStyle = "#000000";
-      for (let i = 8; i < canvas.height; i += 24) {
-        ctx.fillRect(0, i, canvas.width, 2);
+      for (let i = y + 10; i < y + h; i += 28) {
+        ctx.fillRect(x, i, w, 2);
       }
 
       ctx.globalAlpha = 1;
@@ -705,6 +715,8 @@
           return;
         }
 
+        const bounds = getPolygonBounds(polygonPoints);
+
         drawImageToCanvas();
 
         ctx.save();
@@ -716,12 +728,12 @@
         ctx.closePath();
         ctx.clip();
 
-        const ok = applyTextureInsideCurrentClip();
+        const ok = drawSingleSlabImage(bounds.x, bounds.y, bounds.w, bounds.h);
         ctx.restore();
 
         drawPolygonOverlay();
         if (ok) {
-          setStatus("Texture applied inside polygon shape.");
+          setStatus("Single slab image applied inside polygon shape.");
         }
         return;
       }
@@ -738,12 +750,12 @@
       ctx.rect(rectSelection.x, rectSelection.y, rectSelection.w, rectSelection.h);
       ctx.clip();
 
-      const ok = applyTextureInsideCurrentClip();
+      const ok = drawSingleSlabImage(rectSelection.x, rectSelection.y, rectSelection.w, rectSelection.h);
       ctx.restore();
 
       drawRectangleOverlay(rectSelection.x, rectSelection.y, rectSelection.w, rectSelection.h);
       if (ok) {
-        setStatus("Texture applied inside rectangle selection.");
+        setStatus("Single slab image applied inside rectangle selection.");
       }
     }
 
@@ -754,6 +766,19 @@
       }
       drawImageToCanvas();
       setStatus("Showing original image with current selection outline.");
+    }
+
+    function downloadImage() {
+      if (!originalImage) {
+        alert("Please upload and preview an image first.");
+        return;
+      }
+
+      const link = document.createElement("a");
+      link.download = "sbp-visualizer-preview.png";
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+      setStatus("Image downloaded.");
     }
 
     function clearSelectionOnly() {
