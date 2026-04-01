@@ -142,6 +142,7 @@
       border-radius: 10px;
       display: none;
       cursor: crosshair;
+      touch-action: none;
     }
 
     .action-bar {
@@ -149,6 +150,10 @@
       display: flex;
       gap: 12px;
       flex-wrap: wrap;
+    }
+
+    .action-bar button {
+      flex: 1 1 180px;
     }
 
     button {
@@ -258,7 +263,7 @@
       </div>
 
       <div class="mode-box">
-        Draw Mode: Click and drag on the image to mark the countertop area.
+        Draw Mode: Click or touch and drag on the image to mark the countertop area.
       </div>
 
       <div class="note-box">
@@ -365,7 +370,7 @@
       ctx.restore();
     }
 
-    function getMousePos(event) {
+    function getPointerPos(event) {
       const rect = canvas.getBoundingClientRect();
       const scaleX = canvas.width / rect.width;
       const scaleY = canvas.height / rect.height;
@@ -376,19 +381,22 @@
       };
     }
 
-    canvas.addEventListener("mousedown", function(event) {
+    canvas.addEventListener("pointerdown", function(event) {
       if (!originalImage) return;
 
-      const pos = getMousePos(event);
+      event.preventDefault();
+      const pos = getPointerPos(event);
       isDrawing = true;
       startX = pos.x;
       startY = pos.y;
+      canvas.setPointerCapture(event.pointerId);
     });
 
-    canvas.addEventListener("mousemove", function(event) {
+    canvas.addEventListener("pointermove", function(event) {
       if (!isDrawing || !originalImage) return;
 
-      const pos = getMousePos(event);
+      event.preventDefault();
+      const pos = getPointerPos(event);
       const x = Math.min(startX, pos.x);
       const y = Math.min(startY, pos.y);
       const w = Math.abs(pos.x - startX);
@@ -398,12 +406,19 @@
       drawImageToCanvas();
     });
 
-    canvas.addEventListener("mouseup", function() {
+    canvas.addEventListener("pointerup", function(event) {
+      event.preventDefault();
       isDrawing = false;
     });
 
-    canvas.addEventListener("mouseleave", function() {
+    canvas.addEventListener("pointercancel", function(event) {
+      event.preventDefault();
       isDrawing = false;
+    });
+
+    canvas.addEventListener("pointerleave", function(event) {
+      if (!isDrawing) return;
+      event.preventDefault();
     });
 
     function applyColorToSelection() {
