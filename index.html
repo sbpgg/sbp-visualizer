@@ -145,15 +145,17 @@
       touch-action: none;
     }
 
-    .action-bar {
+    .action-bar,
+    .small-btn-group {
       margin-top: 18px;
       display: flex;
       gap: 12px;
       flex-wrap: wrap;
     }
 
-    .action-bar button {
-      flex: 1 1 180px;
+    .action-bar button,
+    .small-btn-group button {
+      flex: 1 1 160px;
     }
 
     button {
@@ -201,17 +203,13 @@
       font-size: 13px;
     }
 
-    .small-btn-group {
-      display: flex;
-      gap: 8px;
+    .status-box {
       margin-top: 12px;
-      flex-wrap: wrap;
-    }
-
-    .small-btn-group button {
-      flex: 1 1 140px;
       padding: 10px 12px;
+      border-radius: 10px;
+      background: #f5f5f5;
       font-size: 13px;
+      color: #444;
     }
 
     @media (max-width: 900px) {
@@ -276,16 +274,21 @@
       </div>
 
       <div class="mode-box" id="modeText">
-        Selection Mode: Tap once for the first corner, then tap again for the opposite corner.
+        Selection Mode: Polygon. Tap points around the countertop, then click Finish Shape.
       </div>
 
       <div class="small-btn-group">
-        <button type="button" class="secondary-btn" onclick="setSelectionMode('tap')">Tap Mode</button>
-        <button type="button" class="secondary-btn" onclick="setSelectionMode('drag')">Drag Mode</button>
+        <button type="button" class="secondary-btn" onclick="setSelectionMode('polygon')">Polygon Mode</button>
+        <button type="button" class="secondary-btn" onclick="setSelectionMode('tapRect')">Tap Rectangle</button>
+        <button type="button" class="secondary-btn" onclick="setSelectionMode('dragRect')">Drag Rectangle</button>
+      </div>
+
+      <div class="status-box" id="statusBox">
+        No shape started yet.
       </div>
 
       <div class="note-box">
-        Tap Mode is usually easier on phones. Drag Mode may feel better on desktop.
+        Polygon Mode is best for odd countertop shapes. Tap each corner point around the surface, then click Finish Shape.
       </div>
     </div>
 
@@ -300,6 +303,8 @@
 
       <div class="action-bar">
         <button class="primary-btn" onclick="applyColorToSelection()">Apply Selected Color</button>
+        <button class="secondary-btn" onclick="finishShape()">Finish Shape</button>
+        <button class="secondary-btn" onclick="undoLastPoint()">Undo Last Point</button>
         <button class="secondary-btn" onclick="showOriginal()">Show Original</button>
         <button class="secondary-btn" onclick="clearSelection()">Clear Selection</button>
         <button class="secondary-btn" onclick="clearPreview()">Clear All</button>
@@ -312,18 +317,23 @@
     let selectedOverlay = "239,228,208";
     let originalImage = null;
 
+    let selectionMode = "polygon";
+
     let isDrawing = false;
-    let selection = null;
+    let rectSelection = null;
     let startX = 0;
     let startY = 0;
-    let selectionMode = "tap";
-    let tapStep = 0;
+    let tapRectStep = 0;
+
+    let polygonPoints = [];
+    let polygonClosed = false;
 
     const uploadInput = document.getElementById("upload");
     const canvas = document.getElementById("previewCanvas");
     const ctx = canvas.getContext("2d");
     const placeholderText = document.getElementById("placeholderText");
     const modeText = document.getElementById("modeText");
+    const statusBox = document.getElementById("statusBox");
 
     function selectColor(card) {
       document.querySelectorAll(".color-card").forEach(c => c.classList.remove("active"));
@@ -335,12 +345,22 @@
 
     function setSelectionMode(mode) {
       selectionMode = mode;
-      tapStep = 0;
-      if (mode === "tap") {
-        modeText.textContent = "Selection Mode: Tap once for the first corner, then tap again for the opposite corner.";
+      isDrawing = false;
+      tapRectStep = 0;
+      clearSelectionOnly();
+
+      if (mode === "polygon") {
+        modeText.textContent = "Selection Mode: Polygon. Tap points around the countertop, then click Finish Shape.";
+        statusBox.textContent = "Polygon mode ready. Add your first point.";
+      } else if (mode === "tapRect") {
+        modeText.textContent = "Selection Mode: Tap Rectangle. Tap once for first corner, then tap again for opposite corner.";
+        statusBox.textContent = "Tap rectangle mode ready.";
       } else {
-        modeText.textContent = "Selection Mode: Touch or click and drag to draw the box.";
+        modeText.textContent = "Selection Mode: Drag Rectangle. Touch or click and drag to draw a box.";
+        statusBox.textContent = "Drag rectangle mode ready.";
       }
+
+      drawImageToCanvas();
     }
 
     uploadInput.addEventListener("change", function(event) {
@@ -351,9 +371,9 @@
       reader.onload = function(e) {
         originalImage = new Image();
         originalImage.onload = function() {
-          selection = null;
-          tapStep = 0;
+          clearSelectionOnly();
           drawImageToCanvas();
+          statusBox.textContent = "Image uploaded. Start marking the countertop area.";
         };
         originalImage.src = e.target.result;
       };
@@ -382,15 +402,23 @@
       ctx.clearRect(0, 0, width, height);
       ctx.drawImage(originalImage, 0, 0, width, height);
 
-      if (selection) {
-        drawSelectionBox(selection.x, selection.y, selection.w, selection.h);
-      }
+      drawActiveSelection();
 
       canvas.style.display = "block";
       placeholderText.style.display = "none";
     }
 
-    function drawSelectionBox(x, y, w, h) {
+    function drawActiveSelection() {
+      if (polygonPoints.length > 0) {
+        drawPolygonOverlay();
+      }
+
+      if (rectSelection) {
+        drawRectangleOverlay(rectSelection.x, rectSelection.y, rectSelection.w, rectSelection.h);
+      }
+    }
+
+    function drawRectangleOverlay(x, y, w, h) {
       ctx.save();
       ctx.strokeStyle = "#111";
       ctx.lineWidth = 2;
@@ -398,6 +426,39 @@
       ctx.strokeRect(x, y, w, h);
       ctx.fillStyle = "rgba(17,17,17,0.08)";
       ctx.fillRect(x, y, w, h);
+      ctx.restore();
+    }
+
+    function drawPolygonOverlay() {
+      if (polygonPoints.length === 0) return;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(polygonPoints[0].x, polygonPoints[0].y);
+
+      for (let i = 1; i < polygonPoints.length; i++) {
+        ctx.lineTo(polygonPoints[i].x, polygonPoints[i].y);
+      }
+
+      if (polygonClosed && polygonPoints.length >= 3) {
+        ctx.closePath();
+        ctx.fillStyle = "rgba(17,17,17,0.08)";
+        ctx.fill();
+      }
+
+      ctx.strokeStyle = "#111";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 4]);
+      ctx.stroke();
+
+      ctx.setLineDash([]);
+      for (const point of polygonPoints) {
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 5, 0, Math.PI * 2);
+        ctx.fillStyle = "#111";
+        ctx.fill();
+      }
+
       ctx.restore();
     }
 
@@ -418,22 +479,36 @@
 
       const pos = getPointerPos(event);
 
-      if (selectionMode === "tap") {
-        if (tapStep === 0) {
+      if (selectionMode === "polygon") {
+        if (polygonClosed) {
+          statusBox.textContent = "Shape already finished. Clear or undo to edit.";
+          return;
+        }
+
+        polygonPoints.push({ x: pos.x, y: pos.y });
+        drawImageToCanvas();
+        statusBox.textContent = `Polygon points: ${polygonPoints.length}. Add more points or click Finish Shape.`;
+        return;
+      }
+
+      if (selectionMode === "tapRect") {
+        if (tapRectStep === 0) {
           startX = pos.x;
           startY = pos.y;
-          tapStep = 1;
-          selection = { x: startX, y: startY, w: 1, h: 1 };
+          tapRectStep = 1;
+          rectSelection = { x: startX, y: startY, w: 1, h: 1 };
           drawImageToCanvas();
+          statusBox.textContent = "First corner set. Tap the opposite corner.";
         } else {
           const x = Math.min(startX, pos.x);
           const y = Math.min(startY, pos.y);
           const w = Math.abs(pos.x - startX);
           const h = Math.abs(pos.y - startY);
 
-          selection = { x, y, w, h };
-          tapStep = 0;
+          rectSelection = { x, y, w, h };
+          tapRectStep = 0;
           drawImageToCanvas();
+          statusBox.textContent = "Rectangle created. Click Apply Selected Color.";
         }
         return;
       }
@@ -445,7 +520,7 @@
     });
 
     canvas.addEventListener("pointermove", function(event) {
-      if (selectionMode !== "drag") return;
+      if (selectionMode !== "dragRect") return;
       if (!isDrawing || !originalImage) return;
 
       event.preventDefault();
@@ -455,12 +530,16 @@
       const w = Math.abs(pos.x - startX);
       const h = Math.abs(pos.y - startY);
 
-      selection = { x, y, w, h };
+      rectSelection = { x, y, w, h };
       drawImageToCanvas();
+      statusBox.textContent = "Dragging rectangle. Release when done.";
     });
 
     canvas.addEventListener("pointerup", function(event) {
       event.preventDefault();
+      if (selectionMode === "dragRect" && isDrawing && rectSelection) {
+        statusBox.textContent = "Rectangle created. Click Apply Selected Color.";
+      }
       isDrawing = false;
     });
 
@@ -469,36 +548,114 @@
       isDrawing = false;
     });
 
+    function finishShape() {
+      if (selectionMode !== "polygon") {
+        statusBox.textContent = "Finish Shape is mainly for Polygon Mode.";
+        return;
+      }
+
+      if (polygonPoints.length < 3) {
+        alert("Please add at least 3 points to create a polygon.");
+        return;
+      }
+
+      polygonClosed = true;
+      drawImageToCanvas();
+      statusBox.textContent = "Polygon finished. Click Apply Selected Color.";
+    }
+
+    function undoLastPoint() {
+      if (selectionMode === "polygon") {
+        if (polygonClosed) {
+          polygonClosed = false;
+        } else if (polygonPoints.length > 0) {
+          polygonPoints.pop();
+        }
+
+        drawImageToCanvas();
+        statusBox.textContent = polygonPoints.length > 0
+          ? `Polygon points: ${polygonPoints.length}.`
+          : "No polygon points yet.";
+        return;
+      }
+
+      if (selectionMode === "tapRect") {
+        rectSelection = null;
+        tapRectStep = 0;
+        drawImageToCanvas();
+        statusBox.textContent = "Tap rectangle reset.";
+        return;
+      }
+
+      if (selectionMode === "dragRect") {
+        rectSelection = null;
+        drawImageToCanvas();
+        statusBox.textContent = "Drag rectangle reset.";
+      }
+    }
+
     function applyColorToSelection() {
       if (!originalImage) {
         alert("Please upload an image first.");
         return;
       }
 
-      if (!selection || selection.w < 10 || selection.h < 10) {
+      const [r, g, b] = selectedOverlay.split(",").map(Number);
+
+      if (selectionMode === "polygon") {
+        if (!polygonClosed || polygonPoints.length < 3) {
+          alert("Please create and finish a polygon shape first.");
+          return;
+        }
+
+        drawImageToCanvas();
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(polygonPoints[0].x, polygonPoints[0].y);
+        for (let i = 1; i < polygonPoints.length; i++) {
+          ctx.lineTo(polygonPoints[i].x, polygonPoints[i].y);
+        }
+        ctx.closePath();
+        ctx.clip();
+
+        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.30)`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.12)`;
+        for (let i = 0; i < canvas.height; i += 14) {
+          ctx.fillRect(0, i, canvas.width, 6);
+        }
+
+        ctx.restore();
+        drawPolygonOverlay();
+        statusBox.textContent = "Color applied inside polygon shape.";
+        return;
+      }
+
+      if (!rectSelection || rectSelection.w < 10 || rectSelection.h < 10) {
         alert("Please mark the countertop area first.");
         return;
       }
 
       drawImageToCanvas();
 
-      const [r, g, b] = selectedOverlay.split(",").map(Number);
-
       ctx.save();
       ctx.beginPath();
-      ctx.rect(selection.x, selection.y, selection.w, selection.h);
+      ctx.rect(rectSelection.x, rectSelection.y, rectSelection.w, rectSelection.h);
       ctx.clip();
 
       ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.30)`;
-      ctx.fillRect(selection.x, selection.y, selection.w, selection.h);
+      ctx.fillRect(rectSelection.x, rectSelection.y, rectSelection.w, rectSelection.h);
 
       ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.12)`;
-      for (let i = selection.y; i < selection.y + selection.h; i += 14) {
-        ctx.fillRect(selection.x, i, selection.w, 6);
+      for (let i = rectSelection.y; i < rectSelection.y + rectSelection.h; i += 14) {
+        ctx.fillRect(rectSelection.x, i, rectSelection.w, 6);
       }
 
       ctx.restore();
-      drawSelectionBox(selection.x, selection.y, selection.w, selection.h);
+      drawRectangleOverlay(rectSelection.x, rectSelection.y, rectSelection.w, rectSelection.h);
+      statusBox.textContent = "Color applied inside rectangle selection.";
     }
 
     function showOriginal() {
@@ -507,24 +664,32 @@
         return;
       }
       drawImageToCanvas();
+      statusBox.textContent = "Showing original image with current selection outline.";
+    }
+
+    function clearSelectionOnly() {
+      rectSelection = null;
+      polygonPoints = [];
+      polygonClosed = false;
+      tapRectStep = 0;
+      isDrawing = false;
     }
 
     function clearSelection() {
       if (!originalImage) return;
-      selection = null;
-      tapStep = 0;
+      clearSelectionOnly();
       drawImageToCanvas();
+      statusBox.textContent = "Selection cleared.";
     }
 
     function clearPreview() {
       originalImage = null;
-      selection = null;
-      tapStep = 0;
-      isDrawing = false;
+      clearSelectionOnly();
       uploadInput.value = "";
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       canvas.style.display = "none";
       placeholderText.style.display = "block";
+      statusBox.textContent = "No shape started yet.";
     }
   </script>
 
