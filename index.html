@@ -106,6 +106,7 @@
       flex-shrink: 0;
       background-size: cover;
       background-position: center;
+      background-color: #eee;
     }
 
     .color-info h3 {
@@ -212,6 +213,7 @@
       background: #f5f5f5;
       font-size: 13px;
       color: #444;
+      word-break: break-word;
     }
 
     @media (max-width: 900px) {
@@ -240,9 +242,9 @@
       <div class="color-grid">
         <div class="color-card active"
              data-color="Calacatta Gold"
-             data-texture="calacatta-gold.jpg"
+             data-texture="calacatta-gold.JPG"
              onclick="selectColor(this)">
-          <div class="swatch" style="background-image:url('calacatta-gold.jpg');"></div>
+          <div class="swatch" style="background-image:url('calacatta-gold.JPG');"></div>
           <div class="color-info">
             <h3>Calacatta Gold</h3>
             <p>Polished</p>
@@ -251,9 +253,9 @@
 
         <div class="color-card"
              data-color="Classic Grey"
-             data-texture="classic-grey.jpg"
+             data-texture="classic-grey.JPG"
              onclick="selectColor(this)">
-          <div class="swatch" style="background-image:url('classic-grey.jpg');"></div>
+          <div class="swatch" style="background-image:url('classic-grey.JPG');"></div>
           <div class="color-info">
             <h3>Classic Grey</h3>
             <p>Polished</p>
@@ -262,9 +264,9 @@
 
         <div class="color-card"
              data-color="Fantasy Brown"
-             data-texture="fantasy-brown.png"
+             data-texture="fantasy-brown.PNG"
              onclick="selectColor(this)">
-          <div class="swatch" style="background-image:url('fantasy-brown.png');"></div>
+          <div class="swatch" style="background-image:url('fantasy-brown.PNG');"></div>
           <div class="color-info">
             <h3>Fantasy Brown</h3>
             <p>Natural Stone</p>
@@ -287,7 +289,7 @@
       </div>
 
       <div class="status-box" id="statusBox">
-        No shape started yet.
+        Ready.
       </div>
 
       <div class="note-box">
@@ -317,8 +319,9 @@
 
   <script>
     let selectedColor = "Calacatta Gold";
-    let selectedTexturePath = "calacatta-gold.jpg";
+    let selectedTexturePath = "calacatta-gold.JPG";
     let selectedTextureImage = null;
+    let textureLoading = false;
     let originalImage = null;
 
     let selectionMode = "polygon";
@@ -341,9 +344,17 @@
     const modeText = document.getElementById("modeText");
     const statusBox = document.getElementById("statusBox");
 
+    function setStatus(message) {
+      statusBox.textContent = message;
+    }
+
     function preloadTexture(path) {
+      textureLoading = true;
+      setStatus("Loading texture: " + path);
+
       return new Promise((resolve, reject) => {
         if (textureCache[path]) {
+          textureLoading = false;
           resolve(textureCache[path]);
           return;
         }
@@ -351,22 +362,30 @@
         const img = new Image();
         img.onload = function() {
           textureCache[path] = img;
+          textureLoading = false;
           resolve(img);
         };
         img.onerror = function() {
+          textureLoading = false;
           reject(new Error("Could not load texture: " + path));
         };
         img.src = path;
       });
     }
 
-    preloadTexture("calacatta-gold.jpg")
-      .then(img => {
-        selectedTextureImage = img;
-      })
-      .catch(() => {
-        statusBox.textContent = "Default texture could not be loaded.";
-      });
+    function loadSelectedTexture(path, colorName) {
+      preloadTexture(path)
+        .then(img => {
+          selectedTextureImage = img;
+          setStatus(colorName + " texture loaded.");
+        })
+        .catch(() => {
+          selectedTextureImage = null;
+          setStatus("Could not load texture: " + path);
+        });
+    }
+
+    loadSelectedTexture("calacatta-gold.JPG", "Calacatta Gold");
 
     function selectColor(card) {
       document.querySelectorAll(".color-card").forEach(c => c.classList.remove("active"));
@@ -376,15 +395,7 @@
       selectedTexturePath = card.getAttribute("data-texture");
       document.getElementById("selectedColor").textContent = selectedColor;
 
-      preloadTexture(selectedTexturePath)
-        .then(img => {
-          selectedTextureImage = img;
-          statusBox.textContent = selectedColor + " selected.";
-        })
-        .catch(() => {
-          selectedTextureImage = null;
-          statusBox.textContent = "Could not load texture for " + selectedColor + ".";
-        });
+      loadSelectedTexture(selectedTexturePath, selectedColor);
     }
 
     function setSelectionMode(mode) {
@@ -395,13 +406,13 @@
 
       if (mode === "polygon") {
         modeText.textContent = "Selection Mode: Polygon. Tap points around the countertop, then click Finish Shape.";
-        statusBox.textContent = "Polygon mode ready. Add your first point.";
+        setStatus("Polygon mode ready. Add your first point.");
       } else if (mode === "tapRect") {
         modeText.textContent = "Selection Mode: Tap Rectangle. Tap once for first corner, then tap again for opposite corner.";
-        statusBox.textContent = "Tap rectangle mode ready.";
+        setStatus("Tap rectangle mode ready.");
       } else {
         modeText.textContent = "Selection Mode: Drag Rectangle. Touch or click and drag to draw a box.";
-        statusBox.textContent = "Drag rectangle mode ready.";
+        setStatus("Drag rectangle mode ready.");
       }
 
       drawImageToCanvas();
@@ -417,7 +428,7 @@
         originalImage.onload = function() {
           clearSelectionOnly();
           drawImageToCanvas();
-          statusBox.textContent = "Image uploaded. Start marking the countertop area.";
+          setStatus("Image uploaded. Start marking the countertop area.");
         };
         originalImage.src = e.target.result;
       };
@@ -525,13 +536,13 @@
 
       if (selectionMode === "polygon") {
         if (polygonClosed) {
-          statusBox.textContent = "Shape already finished. Clear or undo to edit.";
+          setStatus("Shape already finished. Clear or undo to edit.");
           return;
         }
 
         polygonPoints.push({ x: pos.x, y: pos.y });
         drawImageToCanvas();
-        statusBox.textContent = `Polygon points: ${polygonPoints.length}. Add more points or click Finish Shape.`;
+        setStatus(`Polygon points: ${polygonPoints.length}. Add more points or click Finish Shape.`);
         return;
       }
 
@@ -542,7 +553,7 @@
           tapRectStep = 1;
           rectSelection = { x: startX, y: startY, w: 1, h: 1 };
           drawImageToCanvas();
-          statusBox.textContent = "First corner set. Tap the opposite corner.";
+          setStatus("First corner set. Tap the opposite corner.");
         } else {
           const x = Math.min(startX, pos.x);
           const y = Math.min(startY, pos.y);
@@ -552,7 +563,7 @@
           rectSelection = { x, y, w, h };
           tapRectStep = 0;
           drawImageToCanvas();
-          statusBox.textContent = "Rectangle created. Click Apply Selected Color.";
+          setStatus("Rectangle created. Click Apply Selected Color.");
         }
         return;
       }
@@ -576,13 +587,13 @@
 
       rectSelection = { x, y, w, h };
       drawImageToCanvas();
-      statusBox.textContent = "Dragging rectangle. Release when done.";
+      setStatus("Dragging rectangle. Release when done.");
     });
 
     canvas.addEventListener("pointerup", function(event) {
       event.preventDefault();
       if (selectionMode === "dragRect" && isDrawing && rectSelection) {
-        statusBox.textContent = "Rectangle created. Click Apply Selected Color.";
+        setStatus("Rectangle created. Click Apply Selected Color.");
       }
       isDrawing = false;
     });
@@ -594,7 +605,7 @@
 
     function finishShape() {
       if (selectionMode !== "polygon") {
-        statusBox.textContent = "Finish Shape is mainly for Polygon Mode.";
+        setStatus("Finish Shape is mainly for Polygon Mode.");
         return;
       }
 
@@ -605,7 +616,7 @@
 
       polygonClosed = true;
       drawImageToCanvas();
-      statusBox.textContent = "Polygon finished. Click Apply Selected Color.";
+      setStatus("Polygon finished. Click Apply Selected Color.");
     }
 
     function undoLastPoint() {
@@ -617,9 +628,11 @@
         }
 
         drawImageToCanvas();
-        statusBox.textContent = polygonPoints.length > 0
-          ? `Polygon points: ${polygonPoints.length}.`
-          : "No polygon points yet.";
+        setStatus(
+          polygonPoints.length > 0
+            ? `Polygon points: ${polygonPoints.length}.`
+            : "No polygon points yet."
+        );
         return;
       }
 
@@ -627,14 +640,14 @@
         rectSelection = null;
         tapRectStep = 0;
         drawImageToCanvas();
-        statusBox.textContent = "Tap rectangle reset.";
+        setStatus("Tap rectangle reset.");
         return;
       }
 
       if (selectionMode === "dragRect") {
         rectSelection = null;
         drawImageToCanvas();
-        statusBox.textContent = "Drag rectangle reset.";
+        setStatus("Drag rectangle reset.");
       }
     }
 
@@ -676,8 +689,13 @@
         return;
       }
 
+      if (textureLoading) {
+        alert("Texture is still loading. Please wait a moment and try again.");
+        return;
+      }
+
       if (!selectedTextureImage) {
-        alert("Please wait for the selected texture to load.");
+        alert("Selected texture could not be loaded.");
         return;
       }
 
@@ -703,7 +721,7 @@
 
         drawPolygonOverlay();
         if (ok) {
-          statusBox.textContent = "Texture applied inside polygon shape.";
+          setStatus("Texture applied inside polygon shape.");
         }
         return;
       }
@@ -725,7 +743,7 @@
 
       drawRectangleOverlay(rectSelection.x, rectSelection.y, rectSelection.w, rectSelection.h);
       if (ok) {
-        statusBox.textContent = "Texture applied inside rectangle selection.";
+        setStatus("Texture applied inside rectangle selection.");
       }
     }
 
@@ -735,7 +753,7 @@
         return;
       }
       drawImageToCanvas();
-      statusBox.textContent = "Showing original image with current selection outline.";
+      setStatus("Showing original image with current selection outline.");
     }
 
     function clearSelectionOnly() {
@@ -750,7 +768,7 @@
       if (!originalImage) return;
       clearSelectionOnly();
       drawImageToCanvas();
-      statusBox.textContent = "Selection cleared.";
+      setStatus("Selection cleared.");
     }
 
     function clearPreview() {
@@ -760,7 +778,7 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       canvas.style.display = "none";
       placeholderText.style.display = "block";
-      statusBox.textContent = "No shape started yet.";
+      setStatus("Ready.");
     }
   </script>
 
