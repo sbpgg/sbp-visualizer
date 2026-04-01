@@ -141,6 +141,7 @@
       max-height: 520px;
       border-radius: 10px;
       display: none;
+      cursor: crosshair;
     }
 
     .action-bar {
@@ -168,22 +169,31 @@
       color: #222;
     }
 
-    .selected-color-box {
+    .selected-color-box,
+    .note-box,
+    .mode-box {
       margin-top: 16px;
       padding: 12px;
       border-radius: 10px;
-      background: #f7f7f7;
       font-size: 14px;
     }
 
+    .selected-color-box {
+      background: #f7f7f7;
+    }
+
     .note-box {
-      margin-top: 16px;
-      padding: 12px;
-      border-radius: 10px;
       background: #fff8e8;
       border: 1px solid #ead7a4;
       font-size: 13px;
       color: #5f4b1c;
+    }
+
+    .mode-box {
+      background: #eef5ff;
+      border: 1px solid #cfe0ff;
+      color: #1f4b8f;
+      font-size: 13px;
     }
 
     @media (max-width: 900px) {
@@ -209,7 +219,7 @@
       </div>
 
       <div class="section-title">2. Select a Color</div>
-      <div class="color-grid" id="colorGrid">
+      <div class="color-grid">
         <div class="color-card active" data-color="Calacatta Gold" data-overlay="239,228,208" onclick="selectColor(this)">
           <div class="swatch" style="background: linear-gradient(135deg, #f3efe8, #d8c7a7);"></div>
           <div class="color-info">
@@ -247,24 +257,29 @@
         Selected Color: <strong id="selectedColor">Calacatta Gold</strong>
       </div>
 
+      <div class="mode-box">
+        Draw Mode: Click and drag on the image to mark the countertop area.
+      </div>
+
       <div class="note-box">
-        This step applies a simple full-image preview effect. In the next step, we will limit the effect to only the countertop area.
+        This version uses a simple rectangle selection. Later, we can upgrade this to brush selection for better edge accuracy.
       </div>
     </div>
 
     <div class="preview-panel">
       <div class="section-title">3. Preview</div>
-      <div class="preview-area" id="previewArea">
+      <div class="preview-area">
         <div class="placeholder-text" id="placeholderText">
-          Upload an image to begin previewing your selected color
+          Upload an image, then drag a box over the countertop area
         </div>
         <canvas id="previewCanvas"></canvas>
       </div>
 
       <div class="action-bar">
-        <button class="primary-btn" onclick="applyColor()">Apply Selected Color</button>
+        <button class="primary-btn" onclick="applyColorToSelection()">Apply Selected Color</button>
         <button class="secondary-btn" onclick="showOriginal()">Show Original</button>
-        <button class="secondary-btn" onclick="clearPreview()">Clear</button>
+        <button class="secondary-btn" onclick="clearSelection()">Clear Selection</button>
+        <button class="secondary-btn" onclick="clearPreview()">Clear All</button>
       </div>
     </div>
   </div>
@@ -273,6 +288,11 @@
     let selectedColor = "Calacatta Gold";
     let selectedOverlay = "239,228,208";
     let originalImage = null;
+
+    let isDrawing = false;
+    let selection = null;
+    let startX = 0;
+    let startY = 0;
 
     const uploadInput = document.getElementById("upload");
     const canvas = document.getElementById("previewCanvas");
@@ -295,19 +315,22 @@
       reader.onload = function(e) {
         originalImage = new Image();
         originalImage.onload = function() {
-          drawImageToCanvas(originalImage);
+          selection = null;
+          drawImageToCanvas();
         };
         originalImage.src = e.target.result;
       };
       reader.readAsDataURL(file);
     });
 
-    function drawImageToCanvas(img) {
+    function drawImageToCanvas() {
+      if (!originalImage) return;
+
       const maxWidth = 800;
       const maxHeight = 520;
 
-      let width = img.width;
-      let height = img.height;
+      let width = originalImage.width;
+      let height = originalImage.height;
 
       const widthRatio = maxWidth / width;
       const heightRatio = maxHeight / height;
@@ -320,29 +343,99 @@
       canvas.height = height;
 
       ctx.clearRect(0, 0, width, height);
-      ctx.drawImage(img, 0, 0, width, height);
+      ctx.drawImage(originalImage, 0, 0, width, height);
+
+      if (selection) {
+        drawSelectionBox(selection.x, selection.y, selection.w, selection.h);
+      }
 
       canvas.style.display = "block";
       placeholderText.style.display = "none";
     }
 
-    function applyColor() {
+    function drawSelectionBox(x, y, w, h) {
+      ctx.save();
+      ctx.strokeStyle = "#111";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 4]);
+      ctx.strokeRect(x, y, w, h);
+
+      ctx.fillStyle = "rgba(17,17,17,0.08)";
+      ctx.fillRect(x, y, w, h);
+      ctx.restore();
+    }
+
+    function getMousePos(event) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+
+      return {
+        x: (event.clientX - rect.left) * scaleX,
+        y: (event.clientY - rect.top) * scaleY
+      };
+    }
+
+    canvas.addEventListener("mousedown", function(event) {
+      if (!originalImage) return;
+
+      const pos = getMousePos(event);
+      isDrawing = true;
+      startX = pos.x;
+      startY = pos.y;
+    });
+
+    canvas.addEventListener("mousemove", function(event) {
+      if (!isDrawing || !originalImage) return;
+
+      const pos = getMousePos(event);
+      const x = Math.min(startX, pos.x);
+      const y = Math.min(startY, pos.y);
+      const w = Math.abs(pos.x - startX);
+      const h = Math.abs(pos.y - startY);
+
+      selection = { x, y, w, h };
+      drawImageToCanvas();
+    });
+
+    canvas.addEventListener("mouseup", function() {
+      isDrawing = false;
+    });
+
+    canvas.addEventListener("mouseleave", function() {
+      isDrawing = false;
+    });
+
+    function applyColorToSelection() {
       if (!originalImage) {
         alert("Please upload an image first.");
         return;
       }
 
-      drawImageToCanvas(originalImage);
+      if (!selection || selection.w < 10 || selection.h < 10) {
+        alert("Please draw a rectangle over the countertop area first.");
+        return;
+      }
+
+      drawImageToCanvas();
 
       const [r, g, b] = selectedOverlay.split(",").map(Number);
 
-      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.28)`;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(selection.x, selection.y, selection.w, selection.h);
+      ctx.clip();
 
-      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.10)`;
-      for (let i = 0; i < canvas.height; i += 14) {
-        ctx.fillRect(0, i, canvas.width, 6);
+      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.30)`;
+      ctx.fillRect(selection.x, selection.y, selection.w, selection.h);
+
+      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.12)`;
+      for (let i = selection.y; i < selection.y + selection.h; i += 14) {
+        ctx.fillRect(selection.x, i, selection.w, 6);
       }
+
+      ctx.restore();
+      drawSelectionBox(selection.x, selection.y, selection.w, selection.h);
     }
 
     function showOriginal() {
@@ -350,12 +443,18 @@
         alert("Please upload an image first.");
         return;
       }
+      drawImageToCanvas();
+    }
 
-      drawImageToCanvas(originalImage);
+    function clearSelection() {
+      if (!originalImage) return;
+      selection = null;
+      drawImageToCanvas();
     }
 
     function clearPreview() {
       originalImage = null;
+      selection = null;
       uploadInput.value = "";
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       canvas.style.display = "none";
