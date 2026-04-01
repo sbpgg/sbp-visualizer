@@ -35,11 +35,11 @@
     }
 
     .container {
-      max-width: 1200px;
+      max-width: 1280px;
       margin: 30px auto;
       padding: 0 20px;
       display: grid;
-      grid-template-columns: 320px 1fr;
+      grid-template-columns: 340px 1fr;
       gap: 24px;
     }
 
@@ -149,7 +149,8 @@
     }
 
     .action-bar,
-    .small-btn-group {
+    .small-btn-group,
+    .slab-move-grid {
       margin-top: 18px;
       display: flex;
       gap: 12px;
@@ -159,6 +160,10 @@
     .action-bar button,
     .small-btn-group button {
       flex: 1 1 160px;
+    }
+
+    .slab-move-grid button {
+      flex: 1 1 46%;
     }
 
     button {
@@ -181,7 +186,8 @@
 
     .selected-color-box,
     .note-box,
-    .mode-box {
+    .mode-box,
+    .control-box {
       margin-top: 16px;
       padding: 12px;
       border-radius: 10px;
@@ -206,6 +212,11 @@
       font-size: 13px;
     }
 
+    .control-box {
+      background: #f8f8f8;
+      border: 1px solid #e3e3e3;
+    }
+
     .status-box {
       margin-top: 12px;
       padding: 10px 12px;
@@ -214,6 +225,28 @@
       font-size: 13px;
       color: #444;
       word-break: break-word;
+    }
+
+    .slider-row {
+      margin-top: 12px;
+    }
+
+    .slider-row label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      margin-bottom: 6px;
+      color: #333;
+    }
+
+    .slider-row input[type="range"] {
+      width: 100%;
+    }
+
+    .mini-value {
+      font-weight: bold;
+      font-size: 12px;
     }
 
     @media (max-width: 900px) {
@@ -288,17 +321,48 @@
         <button type="button" class="secondary-btn" onclick="setSelectionMode('dragRect')">Drag Rectangle</button>
       </div>
 
+      <div class="control-box">
+        <strong>3. Slab Controls</strong>
+
+        <div class="slider-row">
+          <label>
+            Zoom
+            <span class="mini-value" id="zoomValue">100%</span>
+          </label>
+          <input type="range" id="zoomSlider" min="60" max="220" value="100" step="5">
+        </div>
+
+        <div class="slider-row">
+          <label>
+            Rotate
+            <span class="mini-value" id="rotateValue">0°</span>
+          </label>
+          <input type="range" id="rotateSlider" min="-180" max="180" value="0" step="5">
+        </div>
+
+        <div class="slab-move-grid">
+          <button type="button" class="secondary-btn" onclick="moveSlab(0, -20)">Move Up</button>
+          <button type="button" class="secondary-btn" onclick="moveSlab(0, 20)">Move Down</button>
+          <button type="button" class="secondary-btn" onclick="moveSlab(-20, 0)">Move Left</button>
+          <button type="button" class="secondary-btn" onclick="moveSlab(20, 0)">Move Right</button>
+        </div>
+
+        <div class="small-btn-group">
+          <button type="button" class="secondary-btn" onclick="resetSlabControls()">Reset Slab Position</button>
+        </div>
+      </div>
+
       <div class="status-box" id="statusBox">
         Ready.
       </div>
 
       <div class="note-box">
-        This version uses one slab image across the selected area, keeps guides visible while editing, and downloads a clean image without outlines.
+        You can now zoom, rotate, and move the slab image inside the selected area. This helps line up veining better and improves realism.
       </div>
     </div>
 
     <div class="preview-panel">
-      <div class="section-title">3. Preview</div>
+      <div class="section-title">4. Preview</div>
       <div class="preview-area">
         <div class="placeholder-text" id="placeholderText">
           Upload an image, then mark the countertop area
@@ -337,6 +401,11 @@
     let polygonClosed = false;
     let materialApplied = false;
 
+    let slabScale = 1.0;
+    let slabRotation = 0;
+    let slabOffsetX = 0;
+    let slabOffsetY = 0;
+
     const textureCache = {};
 
     const uploadInput = document.getElementById("upload");
@@ -346,8 +415,18 @@
     const modeText = document.getElementById("modeText");
     const statusBox = document.getElementById("statusBox");
 
+    const zoomSlider = document.getElementById("zoomSlider");
+    const rotateSlider = document.getElementById("rotateSlider");
+    const zoomValue = document.getElementById("zoomValue");
+    const rotateValue = document.getElementById("rotateValue");
+
     function setStatus(message) {
       statusBox.textContent = message;
+    }
+
+    function updateControlLabels() {
+      zoomValue.textContent = `${Math.round(slabScale * 100)}%`;
+      rotateValue.textContent = `${slabRotation}°`;
     }
 
     function preloadTexture(path) {
@@ -387,6 +466,51 @@
         });
     }
 
+    function resetSlabControls(silent = false) {
+      slabScale = 1.0;
+      slabRotation = 0;
+      slabOffsetX = 0;
+      slabOffsetY = 0;
+
+      zoomSlider.value = 100;
+      rotateSlider.value = 0;
+      updateControlLabels();
+
+      if (materialApplied) {
+        drawImageToCanvas(true);
+      }
+
+      if (!silent) {
+        setStatus("Slab controls reset.");
+      }
+    }
+
+    zoomSlider.addEventListener("input", function() {
+      slabScale = Number(this.value) / 100;
+      updateControlLabels();
+      if (materialApplied) {
+        drawImageToCanvas(true);
+      }
+    });
+
+    rotateSlider.addEventListener("input", function() {
+      slabRotation = Number(this.value);
+      updateControlLabels();
+      if (materialApplied) {
+        drawImageToCanvas(true);
+      }
+    });
+
+    function moveSlab(dx, dy) {
+      slabOffsetX += dx;
+      slabOffsetY += dy;
+      if (materialApplied) {
+        drawImageToCanvas(true);
+      }
+      setStatus("Slab moved.");
+    }
+
+    updateControlLabels();
     loadSelectedTexture("calacatta-gold.JPG", "Calacatta Gold");
 
     function selectColor(card) {
@@ -398,6 +522,11 @@
       document.getElementById("selectedColor").textContent = selectedColor;
 
       loadSelectedTexture(selectedTexturePath, selectedColor);
+      resetSlabControls(true);
+
+      if (materialApplied) {
+        drawImageToCanvas(true);
+      }
     }
 
     function setSelectionMode(mode) {
@@ -429,6 +558,7 @@
         originalImage = new Image();
         originalImage.onload = function() {
           clearSelectionOnly();
+          resetSlabControls(true);
           drawImageToCanvas(true);
           setStatus("Image uploaded. Start marking the countertop area.");
         };
@@ -689,14 +819,32 @@
     function drawSingleSlabImage(x, y, w, h) {
       if (!selectedTextureImage) return false;
 
+      const drawW = w * slabScale;
+      const drawH = h * slabScale;
+
+      const centerX = x + w / 2 + slabOffsetX;
+      const centerY = y + h / 2 + slabOffsetY;
+
+      ctx.save();
+      ctx.translate(centerX, centerY);
+      ctx.rotate((slabRotation * Math.PI) / 180);
+
       ctx.globalAlpha = 0.82;
-      ctx.drawImage(selectedTextureImage, x, y, w, h);
+      ctx.drawImage(
+        selectedTextureImage,
+        -drawW / 2,
+        -drawH / 2,
+        drawW,
+        drawH
+      );
 
       ctx.globalAlpha = 0.10;
       ctx.fillStyle = "#ffffff";
-      ctx.fillRect(x, y, w, h);
+      ctx.fillRect(-drawW / 2, -drawH / 2, drawW, drawH);
 
       ctx.globalAlpha = 1;
+      ctx.restore();
+
       return true;
     }
 
@@ -814,6 +962,7 @@
     function clearPreview() {
       originalImage = null;
       clearSelectionOnly();
+      resetSlabControls(true);
       uploadInput.value = "";
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       canvas.style.display = "none";
