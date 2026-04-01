@@ -1,73 +1,298 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>SBP Visualizer</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Surfaces by Pacific Visualizer</title>
   <style>
+    * {
+      box-sizing: border-box;
+    }
+
     body {
-      font-family: Arial;
-      text-align: center;
-      padding: 40px;
-      background: #f5f5f5;
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      color: #222;
     }
-    .box {
-      background: white;
-      padding: 20px;
-      border-radius: 10px;
-      max-width: 600px;
-      margin: auto;
-    }
-    img {
-      max-width: 100%;
-      margin-top: 20px;
-    }
-    select, input {
-      padding: 10px;
-      margin-top: 10px;
-      width: 80%;
-    }
-    button {
-      margin-top: 15px;
-      padding: 12px 20px;
-      background: black;
+
+    .header {
+      background: #111;
       color: white;
-      border: none;
+      padding: 20px 30px;
+      text-align: center;
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 28px;
+    }
+
+    .header p {
+      margin: 8px 0 0;
+      font-size: 14px;
+      color: #ccc;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 30px auto;
+      padding: 0 20px;
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 24px;
+    }
+
+    .sidebar,
+    .preview-panel {
+      background: white;
+      border-radius: 14px;
+      padding: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    }
+
+    .section-title {
+      font-size: 18px;
+      margin-bottom: 14px;
+      font-weight: bold;
+    }
+
+    .upload-box {
+      border: 2px dashed #ccc;
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+      background: #fafafa;
+      margin-bottom: 24px;
+    }
+
+    .upload-box input {
+      width: 100%;
+      margin-top: 12px;
+    }
+
+    .color-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+
+    .color-card {
+      border: 2px solid #ddd;
+      border-radius: 10px;
+      padding: 10px;
       cursor: pointer;
+      transition: 0.2s ease;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      background: white;
+    }
+
+    .color-card:hover {
+      border-color: #111;
+    }
+
+    .color-card.active {
+      border-color: #111;
+      background: #f1f1f1;
+    }
+
+    .swatch {
+      width: 54px;
+      height: 54px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      flex-shrink: 0;
+    }
+
+    .color-info h3 {
+      margin: 0;
+      font-size: 15px;
+    }
+
+    .color-info p {
+      margin: 4px 0 0;
+      font-size: 12px;
+      color: #666;
+    }
+
+    .preview-area {
+      min-height: 520px;
+      border: 2px dashed #ddd;
+      border-radius: 14px;
+      background: #fafafa;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .preview-area img {
+      max-width: 100%;
+      max-height: 520px;
+      display: block;
+    }
+
+    .placeholder-text {
+      color: #777;
+      text-align: center;
+      padding: 20px;
+    }
+
+    .action-bar {
+      margin-top: 18px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      padding: 12px 18px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .primary-btn {
+      background: #111;
+      color: white;
+    }
+
+    .secondary-btn {
+      background: #e9e9e9;
+      color: #222;
+    }
+
+    .selected-color-box {
+      margin-top: 16px;
+      padding: 12px;
+      border-radius: 10px;
+      background: #f7f7f7;
+      font-size: 14px;
+    }
+
+    @media (max-width: 900px) {
+      .container {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
-
 <body>
-  <div class="box">
-    <h1>Try Our Colors in Your Space</h1>
 
-    <input type="file" id="upload" accept="image/*"><br>
+  <div class="header">
+    <h1>Surfaces by Pacific Visualizer</h1>
+    <p>Upload your project photo and preview selected colors in your space</p>
+  </div>
 
-    <select id="color">
-      <option value="gold">Calacatta Gold</option>
-      <option value="white">Super White</option>
-      <option value="grey">Classic Grey</option>
-    </select><br>
+  <div class="container">
+    <div class="sidebar">
+      <div class="section-title">1. Upload Your Image</div>
+      <div class="upload-box">
+        <div>Choose a kitchen, bathroom, or project photo</div>
+        <input type="file" id="upload" accept="image/*">
+      </div>
 
-    <button onclick="applyColor()">Apply Color</button>
+      <div class="section-title">2. Select a Color</div>
+      <div class="color-grid" id="colorGrid">
+        <div class="color-card active" data-color="Calacatta Gold" onclick="selectColor(this)">
+          <div class="swatch" style="background: linear-gradient(135deg, #f3efe8, #d8c7a7);"></div>
+          <div class="color-info">
+            <h3>Calacatta Gold</h3>
+            <p>Polished</p>
+          </div>
+        </div>
 
-    <div id="output"></div>
+        <div class="color-card" data-color="Super White" onclick="selectColor(this)">
+          <div class="swatch" style="background: linear-gradient(135deg, #f8f8f8, #d9d9d9);"></div>
+          <div class="color-info">
+            <h3>Super White</h3>
+            <p>Polished</p>
+          </div>
+        </div>
+
+        <div class="color-card" data-color="Classic Grey" onclick="selectColor(this)">
+          <div class="swatch" style="background: linear-gradient(135deg, #d9d9d9, #b9b9b9);"></div>
+          <div class="color-info">
+            <h3>Classic Grey</h3>
+            <p>Polished</p>
+          </div>
+        </div>
+
+        <div class="color-card" data-color="Fantasy Brown" onclick="selectColor(this)">
+          <div class="swatch" style="background: linear-gradient(135deg, #c9b7a4, #8f7768);"></div>
+          <div class="color-info">
+            <h3>Fantasy Brown</h3>
+            <p>Natural Stone</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="selected-color-box">
+        Selected Color: <strong id="selectedColor">Calacatta Gold</strong>
+      </div>
+    </div>
+
+    <div class="preview-panel">
+      <div class="section-title">3. Preview</div>
+      <div class="preview-area" id="previewArea">
+        <div class="placeholder-text">
+          Upload an image to begin previewing your selected color
+        </div>
+      </div>
+
+      <div class="action-bar">
+        <button class="primary-btn" onclick="showMessage()">Apply Selected Color</button>
+        <button class="secondary-btn" onclick="clearPreview()">Clear</button>
+      </div>
+    </div>
   </div>
 
   <script>
-    function applyColor() {
-      const file = document.getElementById('upload').files[0];
-      if (!file) {
-        alert("Upload an image first");
-        return;
-      }
+    let uploadedImage = null;
+    let selectedColor = "Calacatta Gold";
+
+    function selectColor(card) {
+      document.querySelectorAll(".color-card").forEach(c => c.classList.remove("active"));
+      card.classList.add("active");
+      selectedColor = card.getAttribute("data-color");
+      document.getElementById("selectedColor").textContent = selectedColor;
+    }
+
+    document.getElementById("upload").addEventListener("change", function(event) {
+      const file = event.target.files[0];
+      if (!file) return;
 
       const reader = new FileReader();
       reader.onload = function(e) {
-        document.getElementById("output").innerHTML =
-          "<h3>Preview</h3><img src='" + e.target.result + "' />";
+        uploadedImage = e.target.result;
+        document.getElementById("previewArea").innerHTML = `<img src="${uploadedImage}" alt="Uploaded preview">`;
       };
       reader.readAsDataURL(file);
+    });
+
+    function showMessage() {
+      if (!uploadedImage) {
+        alert("Please upload an image first.");
+        return;
+      }
+
+      alert("Selected color: " + selectedColor + ". Next, we will make this apply visually onto the selected surface.");
+    }
+
+    function clearPreview() {
+      uploadedImage = null;
+      document.getElementById("upload").value = "";
+      document.getElementById("previewArea").innerHTML = `
+        <div class="placeholder-text">
+          Upload an image to begin previewing your selected color
+        </div>
+      `;
     }
   </script>
+
 </body>
 </html>
