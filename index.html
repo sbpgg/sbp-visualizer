@@ -127,18 +127,20 @@
       justify-content: center;
       overflow: hidden;
       position: relative;
-    }
-
-    .preview-area img {
-      max-width: 100%;
-      max-height: 520px;
-      display: block;
+      padding: 12px;
     }
 
     .placeholder-text {
       color: #777;
       text-align: center;
       padding: 20px;
+    }
+
+    canvas {
+      max-width: 100%;
+      max-height: 520px;
+      border-radius: 10px;
+      display: none;
     }
 
     .action-bar {
@@ -174,6 +176,16 @@
       font-size: 14px;
     }
 
+    .note-box {
+      margin-top: 16px;
+      padding: 12px;
+      border-radius: 10px;
+      background: #fff8e8;
+      border: 1px solid #ead7a4;
+      font-size: 13px;
+      color: #5f4b1c;
+    }
+
     @media (max-width: 900px) {
       .container {
         grid-template-columns: 1fr;
@@ -198,7 +210,7 @@
 
       <div class="section-title">2. Select a Color</div>
       <div class="color-grid" id="colorGrid">
-        <div class="color-card active" data-color="Calacatta Gold" onclick="selectColor(this)">
+        <div class="color-card active" data-color="Calacatta Gold" data-overlay="239,228,208" onclick="selectColor(this)">
           <div class="swatch" style="background: linear-gradient(135deg, #f3efe8, #d8c7a7);"></div>
           <div class="color-info">
             <h3>Calacatta Gold</h3>
@@ -206,7 +218,7 @@
           </div>
         </div>
 
-        <div class="color-card" data-color="Super White" onclick="selectColor(this)">
+        <div class="color-card" data-color="Super White" data-overlay="235,235,235" onclick="selectColor(this)">
           <div class="swatch" style="background: linear-gradient(135deg, #f8f8f8, #d9d9d9);"></div>
           <div class="color-info">
             <h3>Super White</h3>
@@ -214,7 +226,7 @@
           </div>
         </div>
 
-        <div class="color-card" data-color="Classic Grey" onclick="selectColor(this)">
+        <div class="color-card" data-color="Classic Grey" data-overlay="194,194,194" onclick="selectColor(this)">
           <div class="swatch" style="background: linear-gradient(135deg, #d9d9d9, #b9b9b9);"></div>
           <div class="color-info">
             <h3>Classic Grey</h3>
@@ -222,7 +234,7 @@
           </div>
         </div>
 
-        <div class="color-card" data-color="Fantasy Brown" onclick="selectColor(this)">
+        <div class="color-card" data-color="Fantasy Brown" data-overlay="176,150,131" onclick="selectColor(this)">
           <div class="swatch" style="background: linear-gradient(135deg, #c9b7a4, #8f7768);"></div>
           <div class="color-info">
             <h3>Fantasy Brown</h3>
@@ -234,63 +246,120 @@
       <div class="selected-color-box">
         Selected Color: <strong id="selectedColor">Calacatta Gold</strong>
       </div>
+
+      <div class="note-box">
+        This step applies a simple full-image preview effect. In the next step, we will limit the effect to only the countertop area.
+      </div>
     </div>
 
     <div class="preview-panel">
       <div class="section-title">3. Preview</div>
       <div class="preview-area" id="previewArea">
-        <div class="placeholder-text">
+        <div class="placeholder-text" id="placeholderText">
           Upload an image to begin previewing your selected color
         </div>
+        <canvas id="previewCanvas"></canvas>
       </div>
 
       <div class="action-bar">
-        <button class="primary-btn" onclick="showMessage()">Apply Selected Color</button>
+        <button class="primary-btn" onclick="applyColor()">Apply Selected Color</button>
+        <button class="secondary-btn" onclick="showOriginal()">Show Original</button>
         <button class="secondary-btn" onclick="clearPreview()">Clear</button>
       </div>
     </div>
   </div>
 
   <script>
-    let uploadedImage = null;
     let selectedColor = "Calacatta Gold";
+    let selectedOverlay = "239,228,208";
+    let originalImage = null;
+
+    const uploadInput = document.getElementById("upload");
+    const canvas = document.getElementById("previewCanvas");
+    const ctx = canvas.getContext("2d");
+    const placeholderText = document.getElementById("placeholderText");
 
     function selectColor(card) {
       document.querySelectorAll(".color-card").forEach(c => c.classList.remove("active"));
       card.classList.add("active");
       selectedColor = card.getAttribute("data-color");
+      selectedOverlay = card.getAttribute("data-overlay");
       document.getElementById("selectedColor").textContent = selectedColor;
     }
 
-    document.getElementById("upload").addEventListener("change", function(event) {
+    uploadInput.addEventListener("change", function(event) {
       const file = event.target.files[0];
       if (!file) return;
 
       const reader = new FileReader();
       reader.onload = function(e) {
-        uploadedImage = e.target.result;
-        document.getElementById("previewArea").innerHTML = `<img src="${uploadedImage}" alt="Uploaded preview">`;
+        originalImage = new Image();
+        originalImage.onload = function() {
+          drawImageToCanvas(originalImage);
+        };
+        originalImage.src = e.target.result;
       };
       reader.readAsDataURL(file);
     });
 
-    function showMessage() {
-      if (!uploadedImage) {
+    function drawImageToCanvas(img) {
+      const maxWidth = 800;
+      const maxHeight = 520;
+
+      let width = img.width;
+      let height = img.height;
+
+      const widthRatio = maxWidth / width;
+      const heightRatio = maxHeight / height;
+      const ratio = Math.min(widthRatio, heightRatio, 1);
+
+      width = width * ratio;
+      height = height * ratio;
+
+      canvas.width = width;
+      canvas.height = height;
+
+      ctx.clearRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+
+      canvas.style.display = "block";
+      placeholderText.style.display = "none";
+    }
+
+    function applyColor() {
+      if (!originalImage) {
         alert("Please upload an image first.");
         return;
       }
 
-      alert("Selected color: " + selectedColor + ". Next, we will make this apply visually onto the selected surface.");
+      drawImageToCanvas(originalImage);
+
+      const [r, g, b] = selectedOverlay.split(",").map(Number);
+
+      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.28)`;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.10)`;
+      for (let i = 0; i < canvas.height; i += 14) {
+        ctx.fillRect(0, i, canvas.width, 6);
+      }
+    }
+
+    function showOriginal() {
+      if (!originalImage) {
+        alert("Please upload an image first.");
+        return;
+      }
+
+      drawImageToCanvas(originalImage);
     }
 
     function clearPreview() {
-      uploadedImage = null;
-      document.getElementById("upload").value = "";
-      document.getElementById("previewArea").innerHTML = `
-        <div class="placeholder-text">
-          Upload an image to begin previewing your selected color
-        </div>
-      `;
+      originalImage = null;
+      uploadInput.value = "";
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      canvas.style.display = "none";
+      placeholderText.style.display = "block";
     }
   </script>
 
