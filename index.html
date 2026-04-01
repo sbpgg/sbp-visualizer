@@ -104,6 +104,8 @@
       border-radius: 8px;
       border: 1px solid #ccc;
       flex-shrink: 0;
+      background-size: cover;
+      background-position: center;
     }
 
     .color-info h3 {
@@ -236,32 +238,33 @@
 
       <div class="section-title">2. Select a Color</div>
       <div class="color-grid">
-        <div class="color-card active" data-color="Calacatta Gold" data-overlay="239,228,208" onclick="selectColor(this)">
-          <div class="swatch" style="background: linear-gradient(135deg, #f3efe8, #d8c7a7);"></div>
+        <div class="color-card active"
+             data-color="Calacatta Gold"
+             data-texture="calacatta-gold.jpg"
+             onclick="selectColor(this)">
+          <div class="swatch" style="background-image:url('calacatta-gold.jpg');"></div>
           <div class="color-info">
             <h3>Calacatta Gold</h3>
             <p>Polished</p>
           </div>
         </div>
 
-        <div class="color-card" data-color="Super White" data-overlay="235,235,235" onclick="selectColor(this)">
-          <div class="swatch" style="background: linear-gradient(135deg, #f8f8f8, #d9d9d9);"></div>
-          <div class="color-info">
-            <h3>Super White</h3>
-            <p>Polished</p>
-          </div>
-        </div>
-
-        <div class="color-card" data-color="Classic Grey" data-overlay="194,194,194" onclick="selectColor(this)">
-          <div class="swatch" style="background: linear-gradient(135deg, #d9d9d9, #b9b9b9);"></div>
+        <div class="color-card"
+             data-color="Classic Grey"
+             data-texture="classic-grey.jpg"
+             onclick="selectColor(this)">
+          <div class="swatch" style="background-image:url('classic-grey.jpg');"></div>
           <div class="color-info">
             <h3>Classic Grey</h3>
             <p>Polished</p>
           </div>
         </div>
 
-        <div class="color-card" data-color="Fantasy Brown" data-overlay="176,150,131" onclick="selectColor(this)">
-          <div class="swatch" style="background: linear-gradient(135deg, #c9b7a4, #8f7768);"></div>
+        <div class="color-card"
+             data-color="Fantasy Brown"
+             data-texture="fantasy-brown.png"
+             onclick="selectColor(this)">
+          <div class="swatch" style="background-image:url('fantasy-brown.png');"></div>
           <div class="color-info">
             <h3>Fantasy Brown</h3>
             <p>Natural Stone</p>
@@ -288,7 +291,7 @@
       </div>
 
       <div class="note-box">
-        Polygon Mode is best for odd countertop shapes. Tap each corner point around the surface, then click Finish Shape.
+        This version fills the selected area with repeating slab texture. It is still a simple visualizer and not full AI surface detection yet.
       </div>
     </div>
 
@@ -314,7 +317,8 @@
 
   <script>
     let selectedColor = "Calacatta Gold";
-    let selectedOverlay = "239,228,208";
+    let selectedTexturePath = "calacatta-gold.jpg";
+    let selectedTextureImage = null;
     let originalImage = null;
 
     let selectionMode = "polygon";
@@ -328,6 +332,8 @@
     let polygonPoints = [];
     let polygonClosed = false;
 
+    const textureCache = {};
+
     const uploadInput = document.getElementById("upload");
     const canvas = document.getElementById("previewCanvas");
     const ctx = canvas.getContext("2d");
@@ -335,12 +341,50 @@
     const modeText = document.getElementById("modeText");
     const statusBox = document.getElementById("statusBox");
 
+    function preloadTexture(path) {
+      return new Promise((resolve, reject) => {
+        if (textureCache[path]) {
+          resolve(textureCache[path]);
+          return;
+        }
+
+        const img = new Image();
+        img.onload = function() {
+          textureCache[path] = img;
+          resolve(img);
+        };
+        img.onerror = function() {
+          reject(new Error("Could not load texture: " + path));
+        };
+        img.src = path;
+      });
+    }
+
+    preloadTexture("calacatta-gold.jpg")
+      .then(img => {
+        selectedTextureImage = img;
+      })
+      .catch(() => {
+        statusBox.textContent = "Default texture could not be loaded.";
+      });
+
     function selectColor(card) {
       document.querySelectorAll(".color-card").forEach(c => c.classList.remove("active"));
       card.classList.add("active");
+
       selectedColor = card.getAttribute("data-color");
-      selectedOverlay = card.getAttribute("data-overlay");
+      selectedTexturePath = card.getAttribute("data-texture");
       document.getElementById("selectedColor").textContent = selectedColor;
+
+      preloadTexture(selectedTexturePath)
+        .then(img => {
+          selectedTextureImage = img;
+          statusBox.textContent = selectedColor + " selected.";
+        })
+        .catch(() => {
+          selectedTextureImage = null;
+          statusBox.textContent = "Could not load texture for " + selectedColor + ".";
+        });
     }
 
     function setSelectionMode(mode) {
@@ -594,13 +638,48 @@
       }
     }
 
+    function createTexturePattern() {
+      if (!selectedTextureImage) return null;
+      return ctx.createPattern(selectedTextureImage, "repeat");
+    }
+
+    function applyTextureInsideCurrentClip() {
+      const pattern = createTexturePattern();
+      if (!pattern) {
+        alert("Selected texture image could not be loaded.");
+        return false;
+      }
+
+      ctx.globalAlpha = 0.75;
+      ctx.fillStyle = pattern;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.globalAlpha = 0.18;
+      ctx.fillStyle = "#ffffff";
+      for (let i = 0; i < canvas.height; i += 18) {
+        ctx.fillRect(0, i, canvas.width, 5);
+      }
+
+      ctx.globalAlpha = 0.20;
+      ctx.fillStyle = "#000000";
+      for (let i = 8; i < canvas.height; i += 24) {
+        ctx.fillRect(0, i, canvas.width, 2);
+      }
+
+      ctx.globalAlpha = 1;
+      return true;
+    }
+
     function applyColorToSelection() {
       if (!originalImage) {
         alert("Please upload an image first.");
         return;
       }
 
-      const [r, g, b] = selectedOverlay.split(",").map(Number);
+      if (!selectedTextureImage) {
+        alert("Please wait for the selected texture to load.");
+        return;
+      }
 
       if (selectionMode === "polygon") {
         if (!polygonClosed || polygonPoints.length < 3) {
@@ -619,17 +698,13 @@
         ctx.closePath();
         ctx.clip();
 
-        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.30)`;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.12)`;
-        for (let i = 0; i < canvas.height; i += 14) {
-          ctx.fillRect(0, i, canvas.width, 6);
-        }
-
+        const ok = applyTextureInsideCurrentClip();
         ctx.restore();
+
         drawPolygonOverlay();
-        statusBox.textContent = "Color applied inside polygon shape.";
+        if (ok) {
+          statusBox.textContent = "Texture applied inside polygon shape.";
+        }
         return;
       }
 
@@ -645,17 +720,13 @@
       ctx.rect(rectSelection.x, rectSelection.y, rectSelection.w, rectSelection.h);
       ctx.clip();
 
-      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.30)`;
-      ctx.fillRect(rectSelection.x, rectSelection.y, rectSelection.w, rectSelection.h);
-
-      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.12)`;
-      for (let i = rectSelection.y; i < rectSelection.y + rectSelection.h; i += 14) {
-        ctx.fillRect(rectSelection.x, i, rectSelection.w, 6);
-      }
-
+      const ok = applyTextureInsideCurrentClip();
       ctx.restore();
+
       drawRectangleOverlay(rectSelection.x, rectSelection.y, rectSelection.w, rectSelection.h);
-      statusBox.textContent = "Color applied inside rectangle selection.";
+      if (ok) {
+        statusBox.textContent = "Texture applied inside rectangle selection.";
+      }
     }
 
     function showOriginal() {
