@@ -187,7 +187,8 @@
     .selected-color-box,
     .note-box,
     .mode-box,
-    .control-box {
+    .control-box,
+    .compare-box {
       margin-top: 16px;
       padding: 12px;
       border-radius: 10px;
@@ -215,6 +216,11 @@
     .control-box {
       background: #f8f8f8;
       border: 1px solid #e3e3e3;
+    }
+
+    .compare-box {
+      background: #f4faf4;
+      border: 1px solid #d7ebd7;
     }
 
     .status-box {
@@ -247,6 +253,13 @@
     .mini-value {
       font-weight: bold;
       font-size: 12px;
+    }
+
+    .view-indicator {
+      margin-top: 12px;
+      font-size: 13px;
+      color: #333;
+      font-weight: bold;
     }
 
     @media (max-width: 900px) {
@@ -352,17 +365,31 @@
         </div>
       </div>
 
+      <div class="compare-box">
+        <strong>4. Before / After</strong>
+
+        <div class="small-btn-group">
+          <button type="button" class="secondary-btn" onclick="showOriginalView()">Original View</button>
+          <button type="button" class="secondary-btn" onclick="showVisualizedView()">Visualized View</button>
+          <button type="button" class="secondary-btn" onclick="toggleBeforeAfter()">Toggle View</button>
+        </div>
+
+        <div class="view-indicator">
+          Current View: <span id="currentViewLabel">Visualized</span>
+        </div>
+      </div>
+
       <div class="status-box" id="statusBox">
         Ready.
       </div>
 
       <div class="note-box">
-        You can now zoom, rotate, and move the slab image inside the selected area. This helps line up veining better and improves realism.
+        You can now compare before and after without losing your selection or slab settings.
       </div>
     </div>
 
     <div class="preview-panel">
-      <div class="section-title">4. Preview</div>
+      <div class="section-title">5. Preview</div>
       <div class="preview-area">
         <div class="placeholder-text" id="placeholderText">
           Upload an image, then mark the countertop area
@@ -374,7 +401,6 @@
         <button class="primary-btn" onclick="applyColorToSelection()">Apply Selected Color</button>
         <button class="secondary-btn" onclick="finishShape()">Finish Shape</button>
         <button class="secondary-btn" onclick="undoLastPoint()">Undo Last Point</button>
-        <button class="secondary-btn" onclick="showOriginal()">Show Original</button>
         <button class="secondary-btn" onclick="downloadImage()">Download Image</button>
         <button class="secondary-btn" onclick="clearSelection()">Clear Selection</button>
         <button class="secondary-btn" onclick="clearPreview()">Clear All</button>
@@ -400,6 +426,7 @@
     let polygonPoints = [];
     let polygonClosed = false;
     let materialApplied = false;
+    let showingOriginal = false;
 
     let slabScale = 1.0;
     let slabRotation = 0;
@@ -419,6 +446,7 @@
     const rotateSlider = document.getElementById("rotateSlider");
     const zoomValue = document.getElementById("zoomValue");
     const rotateValue = document.getElementById("rotateValue");
+    const currentViewLabel = document.getElementById("currentViewLabel");
 
     function setStatus(message) {
       statusBox.textContent = message;
@@ -427,6 +455,10 @@
     function updateControlLabels() {
       zoomValue.textContent = `${Math.round(slabScale * 100)}%`;
       rotateValue.textContent = `${slabRotation}°`;
+    }
+
+    function updateViewLabel() {
+      currentViewLabel.textContent = showingOriginal ? "Original" : "Visualized";
     }
 
     function preloadTexture(path) {
@@ -476,7 +508,7 @@
       rotateSlider.value = 0;
       updateControlLabels();
 
-      if (materialApplied) {
+      if (materialApplied && !showingOriginal) {
         drawImageToCanvas(true);
       }
 
@@ -488,7 +520,7 @@
     zoomSlider.addEventListener("input", function() {
       slabScale = Number(this.value) / 100;
       updateControlLabels();
-      if (materialApplied) {
+      if (materialApplied && !showingOriginal) {
         drawImageToCanvas(true);
       }
     });
@@ -496,7 +528,7 @@
     rotateSlider.addEventListener("input", function() {
       slabRotation = Number(this.value);
       updateControlLabels();
-      if (materialApplied) {
+      if (materialApplied && !showingOriginal) {
         drawImageToCanvas(true);
       }
     });
@@ -504,13 +536,14 @@
     function moveSlab(dx, dy) {
       slabOffsetX += dx;
       slabOffsetY += dy;
-      if (materialApplied) {
+      if (materialApplied && !showingOriginal) {
         drawImageToCanvas(true);
       }
       setStatus("Slab moved.");
     }
 
     updateControlLabels();
+    updateViewLabel();
     loadSelectedTexture("calacatta-gold.JPG", "Calacatta Gold");
 
     function selectColor(card) {
@@ -524,7 +557,7 @@
       loadSelectedTexture(selectedTexturePath, selectedColor);
       resetSlabControls(true);
 
-      if (materialApplied) {
+      if (materialApplied && !showingOriginal) {
         drawImageToCanvas(true);
       }
     }
@@ -559,6 +592,8 @@
         originalImage.onload = function() {
           clearSelectionOnly();
           resetSlabControls(true);
+          showingOriginal = false;
+          updateViewLabel();
           drawImageToCanvas(true);
           setStatus("Image uploaded. Start marking the countertop area.");
         };
@@ -589,7 +624,7 @@
       ctx.clearRect(0, 0, width, height);
       ctx.drawImage(originalImage, 0, 0, width, height);
 
-      if (materialApplied) {
+      if (materialApplied && !showingOriginal) {
         renderCurrentMaterial();
       }
 
@@ -679,6 +714,9 @@
         }
 
         materialApplied = false;
+        showingOriginal = false;
+        updateViewLabel();
+
         polygonPoints.push({ x: pos.x, y: pos.y });
         drawImageToCanvas(true);
         setStatus(`Polygon points: ${polygonPoints.length}. Add more points or click Finish Shape.`);
@@ -687,6 +725,8 @@
 
       if (selectionMode === "tapRect") {
         materialApplied = false;
+        showingOriginal = false;
+        updateViewLabel();
 
         if (tapRectStep === 0) {
           startX = pos.x;
@@ -710,6 +750,9 @@
       }
 
       materialApplied = false;
+      showingOriginal = false;
+      updateViewLabel();
+
       isDrawing = true;
       startX = pos.x;
       startY = pos.y;
@@ -763,6 +806,8 @@
 
     function undoLastPoint() {
       materialApplied = false;
+      showingOriginal = false;
+      updateViewLabel();
 
       if (selectionMode === "polygon") {
         if (polygonClosed) {
@@ -911,19 +956,46 @@
       }
 
       materialApplied = true;
+      showingOriginal = false;
+      updateViewLabel();
       drawImageToCanvas(true);
       setStatus("Material applied.");
     }
 
-    function showOriginal() {
+    function showOriginalView() {
       if (!originalImage) {
         alert("Please upload an image first.");
         return;
       }
 
-      materialApplied = false;
+      showingOriginal = true;
+      updateViewLabel();
       drawImageToCanvas(true);
-      setStatus("Showing original image with current selection outline.");
+      setStatus("Showing original view.");
+    }
+
+    function showVisualizedView() {
+      if (!originalImage) {
+        alert("Please upload an image first.");
+        return;
+      }
+
+      showingOriginal = false;
+      updateViewLabel();
+      drawImageToCanvas(true);
+      setStatus("Showing visualized view.");
+    }
+
+    function toggleBeforeAfter() {
+      if (!originalImage) {
+        alert("Please upload an image first.");
+        return;
+      }
+
+      showingOriginal = !showingOriginal;
+      updateViewLabel();
+      drawImageToCanvas(true);
+      setStatus(showingOriginal ? "Showing original view." : "Showing visualized view.");
     }
 
     function downloadImage() {
@@ -932,6 +1004,10 @@
         return;
       }
 
+      const previousView = showingOriginal;
+      showingOriginal = false;
+      updateViewLabel();
+
       drawImageToCanvas(false);
 
       const link = document.createElement("a");
@@ -939,6 +1015,8 @@
       link.href = canvas.toDataURL("image/png");
       link.click();
 
+      showingOriginal = previousView;
+      updateViewLabel();
       drawImageToCanvas(true);
       setStatus("Image downloaded.");
     }
@@ -950,6 +1028,8 @@
       tapRectStep = 0;
       isDrawing = false;
       materialApplied = false;
+      showingOriginal = false;
+      updateViewLabel();
     }
 
     function clearSelection() {
